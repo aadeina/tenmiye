@@ -50,7 +50,6 @@ const NUMERIC_FIELDS: Partial<
   Record<keyof UserForm, { maxLen: number; required: boolean; test: (v: string) => boolean; message: string }>
 > = {
   phoneNumber: { maxLen: 8, required: true, test: (v) => PHONE_REGEX.test(v), message: 'يجب أن يتكون من 8 أرقام ويبدأ بـ 2 أو 3 أو 4' },
-  whatsappNumber: { maxLen: 8, required: true, test: (v) => PHONE_REGEX.test(v), message: 'يجب أن يتكون من 8 أرقام ويبدأ بـ 2 أو 3 أو 4' },
   nationalId: { maxLen: 10, required: false, test: (v) => NATIONAL_ID_REGEX.test(v), message: 'يجب أن يتكون من 10 أرقام' },
 };
 
@@ -58,6 +57,7 @@ const NUMERIC_FIELDS: Partial<
 function fieldError(key: keyof UserForm, value: string): string {
   const v = value.trim();
   if (key === 'fullName') return v ? '' : 'الاسم الكامل مطلوب';
+  if (key === 'whatsappNumber') return v ? '' : 'هذا الحقل مطلوب';
   const cfg = NUMERIC_FIELDS[key];
   if (cfg) {
     if (!v) return cfg.required ? 'هذا الحقل مطلوب' : '';

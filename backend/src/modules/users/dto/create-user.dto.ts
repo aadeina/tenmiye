@@ -24,7 +24,6 @@ export class CreateUserDto {
 
   @IsString()
   @IsNotEmpty()
-  @Matches(PHONE_REGEX, { message: PHONE_MESSAGE })
   whatsappNumber!: string;
 
   @IsString()
