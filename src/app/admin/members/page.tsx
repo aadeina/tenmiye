@@ -41,6 +41,34 @@ const EMPTY_FORM: UserForm = {
   nationalId: '', city: '', regionId: '', tierId: 'standard', status: 'active',
 };
 
+// Validation mirrors the backend (CreateUserDto): phone & WhatsApp are 8 digits
+// starting with 2, 3, or 4; national ID (NNI) is exactly 10 digits.
+const PHONE_REGEX = /^[234]\d{7}$/;
+const NATIONAL_ID_REGEX = /^\d{10}$/;
+
+const NUMERIC_FIELDS: Partial<
+  Record<keyof UserForm, { maxLen: number; required: boolean; test: (v: string) => boolean; message: string }>
+> = {
+  phoneNumber: { maxLen: 8, required: true, test: (v) => PHONE_REGEX.test(v), message: 'يجب أن يتكون من 8 أرقام ويبدأ بـ 2 أو 3 أو 4' },
+  whatsappNumber: { maxLen: 8, required: true, test: (v) => PHONE_REGEX.test(v), message: 'يجب أن يتكون من 8 أرقام ويبدأ بـ 2 أو 3 أو 4' },
+  nationalId: { maxLen: 10, required: false, test: (v) => NATIONAL_ID_REGEX.test(v), message: 'يجب أن يتكون من 10 أرقام' },
+};
+
+// Returns an Arabic error for a field, or '' when valid.
+function fieldError(key: keyof UserForm, value: string): string {
+  const v = value.trim();
+  if (key === 'fullName') return v ? '' : 'الاسم الكامل مطلوب';
+  const cfg = NUMERIC_FIELDS[key];
+  if (cfg) {
+    if (!v) return cfg.required ? 'هذا الحقل مطلوب' : '';
+    return cfg.test(v) ? '' : cfg.message;
+  }
+  return '';
+}
+
+const VALIDATED_KEYS: (keyof UserForm)[] = ['fullName', 'phoneNumber', 'whatsappNumber', 'nationalId'];
+const NUMERIC_KEYS = Object.keys(NUMERIC_FIELDS) as (keyof UserForm)[];
+
 function statusBadge(status: BackendUser['status']) {
   if (status === 'active') return <span className="rounded-full bg-green-50 text-green-700 border border-green-200 px-2.5 py-0.5 text-[10px] font-bold">نشط</span>;
   if (status === 'pending') return <span className="rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold">معلّق</span>;
@@ -64,6 +92,7 @@ export default function MembersPage() {
   const [form, setForm] = useState<UserForm>(EMPTY_FORM);
   const [isSaving, setIsSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [touched, setTouched] = useState<Partial<Record<keyof UserForm, boolean>>>({});
 
   async function fetchPage(cursor?: string) {
     const params = new URLSearchParams({ limit: '50' });
@@ -134,17 +163,22 @@ export default function MembersPage() {
       status: u.status,
     });
     setFormError('');
+    setTouched({});
   }
 
   function openAdd() {
     setForm(EMPTY_FORM);
     setFormError('');
+    setTouched({});
     setIsAddOpen(true);
   }
 
   async function handleSave() {
-    if (!form.fullName.trim() || !form.phoneNumber || !form.whatsappNumber) {
-      setFormError('الاسم ورقم الهاتف والواتساب مطلوبة');
+    // Surface any field errors live before submitting.
+    setTouched(Object.fromEntries(VALIDATED_KEYS.map((k) => [k, true])));
+    const firstError = VALIDATED_KEYS.map((k) => fieldError(k, form[k] as string)).find(Boolean);
+    if (firstError) {
+      setFormError(firstError);
       return;
     }
     setIsSaving(true);
@@ -357,17 +391,30 @@ export default function MembersPage() {
                 { label: 'رقم الهوية الوطنية', key: 'nationalId' },
                 { label: 'المدينة', key: 'city' },
                 { label: 'المنطقة', key: 'regionId' },
-              ] as { label: string; key: keyof UserForm }[]).map(({ label, key }) => (
-                <div key={key}>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">{label}</label>
-                  <input
-                    type="text"
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#0df20d]/20"
-                    value={form[key] as string}
-                    onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  />
-                </div>
-              ))}
+              ] as { label: string; key: keyof UserForm }[]).map(({ label, key }) => {
+                const numeric = NUMERIC_KEYS.includes(key);
+                const err = touched[key] ? fieldError(key, form[key] as string) : '';
+                return (
+                  <div key={key}>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">{label}</label>
+                    <input
+                      type="text"
+                      inputMode={numeric ? 'numeric' : undefined}
+                      dir={numeric ? 'ltr' : undefined}
+                      className={`w-full h-10 px-3 rounded-lg border bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 ${err ? 'border-red-400 focus:ring-red-200' : 'border-slate-200 dark:border-slate-700 focus:ring-[#0df20d]/20'}`}
+                      value={form[key] as string}
+                      onChange={(e) => {
+                        const maxLen = NUMERIC_FIELDS[key]?.maxLen ?? 10;
+                        const next = numeric ? e.target.value.replace(/\D/g, '').slice(0, maxLen) : e.target.value;
+                        setForm({ ...form, [key]: next });
+                        setTouched((t) => ({ ...t, [key]: true }));
+                      }}
+                      onBlur={() => setTouched((t) => ({ ...t, [key]: true }))}
+                    />
+                    {err && <p className="mt-1 text-xs font-medium text-red-500">{err}</p>}
+                  </div>
+                );
+              })}
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">الحالة</label>
                 <select
